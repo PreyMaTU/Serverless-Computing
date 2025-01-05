@@ -2,6 +2,7 @@ import time
 import numpy as np
 import iot_core as ic
 from datetime import datetime
+from sensor import create_sensors_from_data_file
 
 # MQTT Broker Configuration
 BROKER = "a20x14oot4bls2-ats.iot.eu-north-1.amazonaws.com"  # Replace with your MQTT broker address
@@ -15,35 +16,28 @@ CLIENT_ID = "basicPubSub"
 # Sinusoidal Data Configuration
 AMPLITUDE = 70.0              # Amplitude of the sine wave
 FREQUENCY = 1.0              # Frequency of the sine wave (Hz)
-SAMPLE_RATE = 1              # Number of samples per second
-DURATION = 5* 60             # Duration of data transmission (seconds)
+SAMPLE_RATE_PER_SENSOR = 1/120    # Number of samples per second per sensor
 
-
-# Function to generate sinusoidal data
-def generate_sinusoidal_data(amplitude, frequency, sample_rate, duration):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    return t, amplitude * (1 + np.sin(2 * np.pi * frequency * t)) / 2
 
 
 def main():
-    # Generate sinusoidal data
-    t, data = generate_sinusoidal_data(AMPLITUDE, FREQUENCY, SAMPLE_RATE, DURATION)
+    timestamps, sensors= create_sensors_from_data_file("./data/INCA analysis - large domain Datensatz_20250101T0000_20250103T2300.json")
 
     ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 
+    index= -1
+    for timestamp in timestamps:
+        index+= 1
 
-    for i, value in enumerate(data):
-        # payload = {"time": t[i], "value": value}
-        payload = {
-            'timestamp': datetime.now().isoformat(),
-            'location': '48.225861N/16.409139E',
-            'humidity': float(value)
-        }
-        print("Publishing message {} to topic '{}': {}".format( i, TOPIC, payload))
-        
-        ic.publish_to_iot_core( TOPIC, payload )
+        for sensor in sensors:
+            payload = sensor.get_data_by_index(timestamp, index)
+            print("Publishing message {} to topic '{}': {}".format( index, TOPIC, payload))
+            
+            ic.publish_to_iot_core( TOPIC, payload )
+            
+            wait_time= 1 / (SAMPLE_RATE_PER_SENSOR * len(sensors))
+            time.sleep(wait_time)  # Maintain the sample rate
 
-        time.sleep(1 / SAMPLE_RATE)  # Maintain the sample rate
         
     ic.disconnect_from_iot_core()
 
