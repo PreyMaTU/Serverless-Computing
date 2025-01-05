@@ -8,8 +8,8 @@ BROKER = "a20x14oot4bls2-ats.iot.eu-north-1.amazonaws.com"  # Replace with your 
 PORT = 8883                  # Replace with your MQTT broker port (default is 1883)
 TOPIC = "sdk/test/python"    # Replace with your desired topic
 ROOT_CERT_FILE = "./AmazonRootCA1.pem"      # Root certificate authority, comes from AWS with a long, long name
-CERT_FILE = "./Vanek_Laptop.cert.pem"
-KEY_FILE = "./Vanek_Laptop.private.key"
+CERT_FILE = "./certs/Vanek_Laptop.cert.pem"
+KEY_FILE = "./certs/Vanek_Laptop.private.key"
 CLIENT_ID = "basicPubSub"
 
 # Sinusoidal Data Configuration
