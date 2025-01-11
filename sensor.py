@@ -78,6 +78,6 @@ def create_sensors_from_data_file( file_path, id_prefix ):
     timestamps= data['timestamps']
     features= data['features']
 
-    sensors= [ Sensor(feature) for feature in features ]
+    sensors= [ Sensor(feature, id_prefix) for feature in features ]
 
     return timestamps, sensors
