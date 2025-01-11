@@ -104,7 +104,7 @@ def lambda_handler(event, context):
             Item = normalized_data
         )
 
-        utc_now= datetime.now(timezone.utc).timestamp()
+        utc_now= 1000 * datetime.now(timezone.utc).timestamp()
         event_time= event.get('received_time')
         time_diff= utc_now - event_time
         print( f'Stored event in {time_diff} ({event_time} -> {utc_now})')
