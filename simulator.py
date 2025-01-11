@@ -14,9 +14,8 @@ CERT_FILE = "./certs/Vanek_Laptop.cert.pem"
 KEY_FILE = "./certs/Vanek_Laptop.private.key"
 CLIENT_ID = "basicPubSub"
 
-# Sinusoidal Data Configuration
-AMPLITUDE = 70.0              # Amplitude of the sine wave
-FREQUENCY = 1.0              # Frequency of the sine wave (Hz)
+# Sensor Data Configuration
+SENSOR_ID_PREFIX= ''
 SAMPLE_RATE_PER_SENSOR = 1/120    # Number of samples per second per sensor
 
 
@@ -51,7 +50,7 @@ def send_loop(timestamps, sensors, count):
 def main():
     config= configure()
 
-    timestamps, sensors= create_sensors_from_data_file("./data/INCA analysis - large domain Datensatz_20250101T0000_20250103T2300.json")
+    timestamps, sensors= create_sensors_from_data_file("./data/INCA analysis - large domain Datensatz_20250101T0000_20250103T2300.json", SENSOR_ID_PREFIX)
 
     ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 

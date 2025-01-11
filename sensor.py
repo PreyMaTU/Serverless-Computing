@@ -7,14 +7,14 @@ SENSOR_TYPES= [
 ]
 
 class Sensor:
-  def __init__(self, json_object):
+  def __init__(self, json_object, id_prefix= ''):
     self.longitude= json_object['geometry']['coordinates'][0]
     self.latitude= json_object['geometry']['coordinates'][1]
 
     self.humidity_data= json_object['properties']['parameters']['RH2M']['data']
     self.temperature_data= json_object['properties']['parameters']['T2M']['data']
 
-    self.sensor_id= self.create_unique_id()
+    self.sensor_id= id_prefix + self.create_unique_id()
     self.sensor_type= self.select_random_sensor_type()
 
   def select_random_sensor_type( self ):
@@ -72,7 +72,7 @@ class Sensor:
       raise ValueError('Unknown sensor type')
 
 
-def create_sensors_from_data_file( file_path ):
+def create_sensors_from_data_file( file_path, id_prefix ):
   with open(file_path, 'r') as file:
     data = json.load(file)
     timestamps= data['timestamps']
