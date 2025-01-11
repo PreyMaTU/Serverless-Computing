@@ -1,6 +1,6 @@
 import json
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Initialize the DynamoDB client
 dynamodb = boto3.client('dynamodb')
@@ -94,7 +94,7 @@ def lambda_handler(event, context):
     """
     try:
         # Log the event data
-        print("Received event:", json.dumps(event, indent=2))
+        # print("Received event:", json.dumps(event, indent=2))
         
         normalized_data= normalize_sensor_data(event)
 
@@ -103,6 +103,11 @@ def lambda_handler(event, context):
             TableName = TABLE_NAME,
             Item = normalized_data
         )
+
+        utc_now= datetime.now(timezone.utc).timestamp()
+        event_time= event.get('received_time')
+        time_diff= utc_now - event_time
+        print( f'Stored event in {time_diff} ({event_time} -> {utc_now})')
         
         return {
             'statusCode': 200,
