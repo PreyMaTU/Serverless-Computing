@@ -1,7 +1,5 @@
 import time
-import numpy as np
 import iot_core as ic
-from datetime import datetime
 from sensor import create_sensors_from_data_file
 from argparse import ArgumentParser
 
