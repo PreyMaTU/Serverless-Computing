@@ -4,7 +4,7 @@ import boto3
 
 # General Config
 DYNAMODB_TABLE = 'Sensordata'
-TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:region:account-id:function:lamda_telegram_communication'
+TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_Communication'
 
 # Sensor Type Config
 SENSOR_CONFIG = {

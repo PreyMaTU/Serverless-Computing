@@ -1,5 +1,9 @@
 import json
 import logging
+
+import boto3
+from botocore.exceptions import BotoCoreError
+from telegram.error import TelegramError
 import telegram
 
 # Config
@@ -19,19 +23,27 @@ def send_telegram_message(message):
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.debug(f"Message sent to Telegram: {message}")
-    except telegram.error.TelegramError as e:
+    except TelegramError as e:
         raise e
 
 
-def send_telegram_image(image_path, caption=None):
+def send_telegram_image(bucket_name, s3_key, caption=None):
     """
-    Sends an image to the configured Telegram chat.
+    Downloads an image from S3 and sends it to Telegram.
     """
     try:
-        with open(image_path, 'rb') as image:
+        s3 = boto3.client('s3')
+
+        # Download the file from S3
+        download_path = f"/tmp/{s3_key.split('/')[-1]}"
+        s3.download_file(bucket_name, s3_key, download_path)
+
+        with open(download_path, 'rb') as image:
             bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=image, caption=caption)
-            logger.debug(f"Image sent to Telegram: {image_path}")
-    except telegram.error.TelegramError as e:
+            logger.debug(f"Image sent to Telegram: {bucket_name}/{s3_key}")
+    except BotoCoreError as e:
+        raise RuntimeError(f"Failed to download image from S3: {str(e)}")
+    except TelegramError as e:
         raise e
 
 
@@ -46,15 +58,20 @@ def lambda_handler(event, context):
         action = event.get('action')
 
         if action == 'send_message':
-            message = event.get('message', 'Default message')
+            message = event.get('message')
+            if not message:
+                raise ValueError("'message' must be provided for 'send_message' action.")
             send_telegram_message(message)
 
         elif action == 'send_image':
-            image_path = event.get('image_path')
+            bucket_name = event.get('bucket_name')
+            s3_key = event.get('s3_key')
             caption = event.get('caption', None)
-            if not image_path:
-                raise ValueError("Image path must be provided for 'send_image' action.")
-            send_telegram_image(image_path, caption)
+
+            if not bucket_name or not s3_key:
+                raise ValueError("Both 'bucket_name' and 's3_key' must be provided for 'send_image' action.")
+
+            send_telegram_image(bucket_name, s3_key, caption)
 
         else:
             raise ValueError("Invalid action '{action}' specified. Use 'send_message' or 'send_image'.")
@@ -76,13 +93,21 @@ def lambda_handler(event, context):
                 "details": str(e)
             })
         }
-    except telegram.error.TelegramError as e:
+    except TelegramError as e:
         logger.error(f"TelegramError: {str(e)}")
         return {
             "statusCode": 502,
             "body": json.dumps({
                 "error": "Failed to process the Telegram request.",
                 "details": str(e)
+            })
+        }
+    except RuntimeError as e:
+        logger.error(f"RuntimeError: {str(e)}")
+        return {
+            "statusCode": 502,
+            "body": json.dumps({
+                "error": str(e)
             })
         }
     except Exception as e:

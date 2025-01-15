@@ -7,7 +7,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 s3 = boto3.client('s3')
 lambda_client = boto3.client('lambda')
 BUCKET_NAME = "heatmap-bucket"
-TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:region:account-id:function:lamda_telegram_communication'
+TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_Communication'
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -37,25 +37,23 @@ def lambda_handler(event, context):
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
         latest_key, last_modified = get_latest_heatmap()
-        download_path = f"/tmp/{latest_key}"
-        s3.download_file(BUCKET_NAME, latest_key, download_path)
-        logger.debug(f"Downloaded heatmap: {latest_key} to {download_path}")
-
         timestamp = last_modified.strftime("%Y-%m-%d %H:%M:%S")
-        message = f"Here is the latest heatmap, generated on {timestamp}."
+        caption = (f"The latest heatmap visualization of your field conditions is now available. "
+                   f"This map was generated on {timestamp}. "
+                   f"Check for updates on soil moisture and temperature to plan your next steps!")
 
         response = lambda_client.invoke(
             FunctionName=TELEGRAM_LAMBDA_ARN,
             InvocationType='RequestResponse',
             Payload=json.dumps({
                 "action": "send_image",
-                "image_path": download_path,
-                "caption": message
+                "bucket_name": BUCKET_NAME,
+                "s3_key": latest_key,
+                "caption": caption
             })
         )
         logger.debug(f"Telegram Lambda invoked successfully: {response}")
 
-        logger.debug("Heatmap and message sent successfully.")
         return {
             "statusCode": 200,
             "body": json.dumps({

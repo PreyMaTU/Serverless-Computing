@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import os
 
 # Set Matplotlib config directory to /tmp (must be set before importing Matplotlib)
@@ -26,8 +27,7 @@ table = dynamodb.Table("Sensordata")
 
 # S3 bucket name
 BUCKET_NAME = "heatmap-bucket"
-output_path = "heatmaps/sensor_heatmap.png"
-
+DEFAULT_OUTPUT_PATH = "heatmaps/sensor_heatmap.png"
 
 square_size_lat = 0.009
 square_size_lon = square_size_lat / 0.7
@@ -60,9 +60,9 @@ def fetch_data_from_dynamodb():
     return latest_data
 
 
-def create_heatmap(data, output_path):
+def create_heatmap(data):
     """
-    Create a heatmap based on DynamoDB data and save it to the specified path.
+    Create a heatmap based on DynamoDB data, save it to S3, and return the S3 key.
     """
     latitudes = [item["location"]["lat"] for item in data]
     longitudes = [item["location"]["lon"] for item in data]
@@ -105,12 +105,16 @@ def create_heatmap(data, output_path):
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    dynamic_output_path = DEFAULT_OUTPUT_PATH.replace(".png", f"_{timestamp}.png")
+
     buffer = BytesIO()
     plt.savefig(buffer, format="png", bbox_inches="tight")
     buffer.seek(0)
 
-    s3.upload_fileobj(buffer, BUCKET_NAME, output_path)
+    s3.upload_fileobj(buffer, BUCKET_NAME, dynamic_output_path)
     buffer.close()
+    return dynamic_output_path
 
 
 def lambda_handler(event, context):
@@ -119,12 +123,12 @@ def lambda_handler(event, context):
     """
     try:
         data = fetch_data_from_dynamodb()
-        create_heatmap(data, output_path)
+        dynamic_output_path = create_heatmap(data)
 
         return {
             "statusCode": 200,
             "body": json.dumps(
-                {"message": "Plot created and uploaded to S3", "s3_path": output_path}
+                {"message": "Plot created and uploaded to S3", "s3_path": dynamic_output_path}
             ),
         }
     except Exception as e:
