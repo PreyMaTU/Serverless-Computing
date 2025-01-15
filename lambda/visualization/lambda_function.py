@@ -35,17 +35,29 @@ square_size_lon = square_size_lat / 0.7
 
 def fetch_data_from_dynamodb():
     """
-    Fetch all records from the DynamoDB table.
+    Fetch latest records from the DynamoDB table.
     Returns a list of records with sensor data.
     """
-    response = table.scan()
-    data = response.get("Items", [])
+    response = table.scan(ProjectionExpression="sensor_id")
+    sensor_ids = {item["sensor_id"] for item in response.get("Items", [])}
 
     while "LastEvaluatedKey" in response:
-        response = table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-        data.extend(response.get("Items", []))
+        response = table.scan(
+            ProjectionExpression="sensor_id",
+            ExclusiveStartKey=response["LastEvaluatedKey"],
+        )
+        sensor_ids.update({item["sensor_id"] for item in response.get("Items", [])})
 
-    return data
+    latest_data = []
+    for sensor_id in sensor_ids:
+        query_response = table.query(
+            KeyConditionExpression=Key("sensor_id").eq(sensor_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        latest_data.extend(query_response.get("Items", []))
+
+    return latest_data
 
 
 def create_heatmap(data, output_path):
