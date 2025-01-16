@@ -6,7 +6,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 # Config
 s3 = boto3.client('s3')
 lambda_client = boto3.client('lambda')
-BUCKET_NAME = "heatmap-bucket"
+BUCKET_NAME = "heatmap-bucket-agrisense"
 TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_Communication'
 
 logger = logging.getLogger()
