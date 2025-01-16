@@ -4,29 +4,31 @@ from sensor import create_sensors_from_data_file
 from argparse import ArgumentParser
 
 # MQTT Broker Configuration
-BROKER = "azie6gjpxjyi1-ats.iot.eu-central-1.amazonaws.com"  # Replace with your MQTT broker address
+BROKER = "a86hzqaw9f6v0-ats.iot.eu-north-1.amazonaws.com"  # Replace with your MQTT broker address
 PORT = 8883  # Replace with your MQTT broker port (default is 1883)
 TOPIC = "sdk/test/python"  # Replace with your desired topic
 ROOT_CERT_FILE = "./AmazonRootCA1.pem"  # Root certificate authority, comes from AWS with a long, long name
-CERT_FILE = "./certs/slc_test_simulator.cert.pem"
-KEY_FILE = "./certs/slc_test_simulator.private.key"
+CERT_FILE = "./certs/Simulator.cert.pem"
+KEY_FILE = "./certs/Simulator.private.key"
 CLIENT_ID = "basicPubSub"
 
 # Sensor Data Configuration
-SENSOR_ID_PREFIX = ''
+SENSOR_ID_PREFIX = ""
 SAMPLE_RATE_PER_SENSOR = 1 / 120  # Number of samples per second per sensor
 
 
 def configure():
-    parser = ArgumentParser(prog='IoT Core Simulator', description='Simulates multiple IoT sensors')
-    parser.add_argument('-c', '--count', type=int, default=float('inf'))
-    parser.add_argument('-s', '--silent', action='store_true')
+    parser = ArgumentParser(
+        prog="IoT Core Simulator", description="Simulates multiple IoT sensors"
+    )
+    parser.add_argument("-c", "--count", type=int, default=float("inf"))
+    parser.add_argument("-s", "--silent", action="store_true")
 
     return parser.parse_args()
 
 
 def send_loop(timestamps, sensors, count, silent):
-    start_time= time.time()
+    start_time = time.time()
 
     index = -1
     msg_id = -1
@@ -37,37 +39,44 @@ def send_loop(timestamps, sensors, count, silent):
             msg_id += 1
 
             if msg_id + 1 > count:
-                print(f'Done sending {count} messages')
+                print(f"Done sending {count} messages")
 
-                end_time= time.time()
-                return msg_id, end_time- start_time
+                end_time = time.time()
+                return msg_id, end_time - start_time
 
             payload = sensor.get_data_by_index(timestamp, index)
             if not silent:
-                print(f"Publishing message {msg_id} (row {index}) to topic '{TOPIC}': {payload}")
-            
+                print(
+                    f"Publishing message {msg_id} (row {index}) to topic '{TOPIC}': {payload}"
+                )
+
             ic.publish_to_iot_core(TOPIC, payload)
 
             wait_time = 1 / (SAMPLE_RATE_PER_SENSOR * len(sensors))
             time.sleep(wait_time)  # Maintain the sample rate
 
-    end_time= time.time()
-    return msg_id+1, end_time- start_time
+    end_time = time.time()
+    return msg_id + 1, end_time - start_time
+
 
 def main():
     config = configure()
 
     timestamps, sensors = create_sensors_from_data_file(
-        "./data/INCA analysis - large domain Datensatz_20250101T0000_20250103T2300.json", SENSOR_ID_PREFIX)
+        "./data/INCA analysis - large domain Datensatz_20250101T0000_20250103T2300.json",
+        SENSOR_ID_PREFIX,
+    )
 
     ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 
-    message_count, runtime= send_loop(timestamps, sensors, config.count, config.silent)
+    message_count, runtime = send_loop(timestamps, sensors, config.count, config.silent)
 
     ic.disconnect_from_iot_core()
 
-    print(f'Sent {message_count} messages in {round(runtime, 2)}s ({round(60* message_count/runtime)} msg/min)')
+    print(
+        f"Sent {message_count} messages in {round(runtime, 2)}s ({round(60* message_count/runtime)} msg/min)"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

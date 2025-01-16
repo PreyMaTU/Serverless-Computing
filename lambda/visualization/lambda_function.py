@@ -26,7 +26,7 @@ s3 = boto3.client("s3")
 table = dynamodb.Table("Sensordata")
 
 # S3 bucket name
-BUCKET_NAME = "heatmap-bucket"
+BUCKET_NAME = "heatmap-bucket-agrisense"
 DEFAULT_OUTPUT_PATH = "heatmaps/sensor_heatmap.png"
 
 square_size_lat = 0.009
@@ -128,7 +128,10 @@ def lambda_handler(event, context):
         return {
             "statusCode": 200,
             "body": json.dumps(
-                {"message": "Plot created and uploaded to S3", "s3_path": dynamic_output_path}
+                {
+                    "message": "Plot created and uploaded to S3",
+                    "s3_path": dynamic_output_path,
+                }
             ),
         }
     except Exception as e:
