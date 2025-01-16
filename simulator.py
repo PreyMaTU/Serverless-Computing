@@ -20,11 +20,12 @@ SAMPLE_RATE_PER_SENSOR = 1 / 120  # Number of samples per second per sensor
 def configure():
     parser = ArgumentParser(prog='IoT Core Simulator', description='Simulates multiple IoT sensors')
     parser.add_argument('-c', '--count', type=int, default=float('inf'))
+    parser.add_argument('-s', '--silent', action='store_true')
 
     return parser.parse_args()
 
 
-def send_loop(timestamps, sensors, count):
+def send_loop(timestamps, sensors, count, silent):
     index = -1
     msg_id = -1
     for timestamp in timestamps:
@@ -34,12 +35,13 @@ def send_loop(timestamps, sensors, count):
             msg_id += 1
 
             if msg_id + 1 > count:
-                print('Done sending {} messages', count)
+                print(f'Done sending {count} messages')
                 return
 
             payload = sensor.get_data_by_index(timestamp, index)
-            print("Publishing message {} (row {}) to topic '{}': {}".format(msg_id, index, TOPIC, payload))
-
+            if not silent:
+                print(f"Publishing message {msg_id} (row {index}) to topic '{TOPIC}': {payload}")
+            
             ic.publish_to_iot_core(TOPIC, payload)
 
             wait_time = 1 / (SAMPLE_RATE_PER_SENSOR * len(sensors))
@@ -54,7 +56,7 @@ def main():
 
     ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 
-    send_loop(timestamps, sensors, config.count)
+    send_loop(timestamps, sensors, config.count, config.silent)
 
     ic.disconnect_from_iot_core()
 
