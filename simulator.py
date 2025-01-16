@@ -26,6 +26,8 @@ def configure():
 
 
 def send_loop(timestamps, sensors, count, silent):
+    start_time= time.time()
+
     index = -1
     msg_id = -1
     for timestamp in timestamps:
@@ -36,7 +38,9 @@ def send_loop(timestamps, sensors, count, silent):
 
             if msg_id + 1 > count:
                 print(f'Done sending {count} messages')
-                return
+
+                end_time= time.time()
+                return msg_id, end_time- start_time
 
             payload = sensor.get_data_by_index(timestamp, index)
             if not silent:
@@ -47,6 +51,8 @@ def send_loop(timestamps, sensors, count, silent):
             wait_time = 1 / (SAMPLE_RATE_PER_SENSOR * len(sensors))
             time.sleep(wait_time)  # Maintain the sample rate
 
+    end_time= time.time()
+    return msg_id+1, end_time- start_time
 
 def main():
     config = configure()
@@ -56,9 +62,11 @@ def main():
 
     ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 
-    send_loop(timestamps, sensors, config.count, config.silent)
+    message_count, runtime= send_loop(timestamps, sensors, config.count, config.silent)
 
     ic.disconnect_from_iot_core()
+
+    print(f'Sent {message_count} messages in {round(runtime, 2)}s ({round(60* message_count/runtime)} msg/min)')
 
 
 if __name__ == '__main__':
