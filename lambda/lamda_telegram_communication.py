@@ -2,55 +2,72 @@ import json
 import logging
 
 import boto3
+import requests
 from botocore.exceptions import BotoCoreError
-from telegram.error import TelegramError
-import telegram
 
 # Config
 TELEGRAM_TOKEN = "7701970803:AAHMBH5xrO_bD7jPZxxqQcRlm8tlsGkkjEs"
 TELEGRAM_CHAT_ID = "-4790922611"
 
-bot = telegram.Bot(token=TELEGRAM_TOKEN)
-
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 
 def send_telegram_message(message):
     """
-    Sends a message to the configured Telegram chat.
+    Sends a message to the configured Telegram chat using the Telegram API.
     """
+    url = f"{TELEGRAM_API_URL}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+    }
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        logger.debug(f"Message sent to Telegram: {message}")
-    except TelegramError as e:
-        raise e
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            logger.debug(f"Message sent to Telegram: {message}")
+        else:
+            logger.error(f"Failed to send message. Status: {response.status_code}, Response: {response.text}")
+            raise RuntimeError(f"Failed to send message to Telegram. Response: {response.text}")
+    except requests.RequestException as e:
+        logger.error(f"RequestException occurred: {str(e)}")
+        raise RuntimeError(f"An error occurred while sending a message to Telegram: {str(e)}")
 
 
 def send_telegram_image(bucket_name, s3_key, caption=None):
     """
-    Downloads an image from S3 and sends it to Telegram.
+    Downloads an image from S3 and sends it to Telegram using the Telegram API.
     """
+    s3 = boto3.client('s3')
+    download_path = f"/tmp/{s3_key.split('/')[-1]}"
     try:
-        s3 = boto3.client('s3')
-
         # Download the file from S3
-        download_path = f"/tmp/{s3_key.split('/')[-1]}"
         s3.download_file(bucket_name, s3_key, download_path)
+        logger.debug(f"Image downloaded from S3: {bucket_name}/{s3_key} to {download_path}")
 
+        url = f"{TELEGRAM_API_URL}/sendPhoto"
         with open(download_path, 'rb') as image:
-            bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=image, caption=caption)
-            logger.debug(f"Image sent to Telegram: {bucket_name}/{s3_key}")
+            files = {"photo": image}
+            data = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption}
+            response = requests.post(url, files=files, data=data)
+            if response.status_code == 200:
+                logger.debug(f"Image sent to Telegram: {bucket_name}/{s3_key}")
+            else:
+                logger.error(f"Failed to send image. Status: {response.status_code}, Response: {response.text}")
+                raise RuntimeError(f"Failed to send image to Telegram. Response: {response.text}")
     except BotoCoreError as e:
+        logger.error(f"BotoCoreError occurred: {str(e)}")
         raise RuntimeError(f"Failed to download image from S3: {str(e)}")
-    except TelegramError as e:
-        raise e
+    except requests.RequestException as e:
+        logger.error(f"RequestException occurred: {str(e)}")
+        raise RuntimeError(f"An error occurred while sending an image to Telegram: {str(e)}")
 
 
 def lambda_handler(event, context):
     """
     Lambda function entry point for sending Telegram messages or images.
-    The event should specify the action ('send_message' or 'send_image').
     """
     try:
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
@@ -93,15 +110,6 @@ def lambda_handler(event, context):
                 "details": str(e)
             })
         }
-    except TelegramError as e:
-        logger.error(f"TelegramError: {str(e)}")
-        return {
-            "statusCode": 502,
-            "body": json.dumps({
-                "error": "Failed to process the Telegram request.",
-                "details": str(e)
-            })
-        }
     except RuntimeError as e:
         logger.error(f"RuntimeError: {str(e)}")
         return {
@@ -118,5 +126,4 @@ def lambda_handler(event, context):
                 "error": "An unexpected error occurred while processing the request.",
                 "details": str(e)
             })
-
         }
