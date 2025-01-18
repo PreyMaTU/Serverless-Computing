@@ -20,9 +20,10 @@ SAMPLE_RATE_PER_SENSOR = 1 / 120  # Number of samples per second per sensor
 
 def configure():
     parser = ArgumentParser(prog='IoT Core Simulator', description='Simulates multiple IoT sensors')
-    parser.add_argument('-c', '--count', type=int, default=float('inf'))
-    parser.add_argument('-s', '--silent', action='store_true')
-    parser.add_argument('-t', '--time', type=str, default=None)
+    parser.add_argument('-c', '--count', type=int, default=float('inf'), help= 'Number of MQTT messages to send')
+    parser.add_argument('-s', '--silent', action='store_true', help= 'Do not print messages while sending')
+    parser.add_argument('-t', '--time', type=str, default=None, help= 'Sets the time of the first sample. Can be set to "now"')
+    parser.add_argument('-b', '--batches', type=int, default=None, help= 'Number of batches to send. Each batch sends one message per sensor. Overrides count')
 
     return parser.parse_args()
 
@@ -90,7 +91,10 @@ def main():
 
     timestamps= offset_timestamps(timestamps, config.time)
 
-    ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
+    if config.batches is not None:
+        config.count= config.batches * len(sensors)
+        print(f'Sending {config.batches} batches to {len(sensors)} sensors')
+
 
     message_count, runtime = send_loop(timestamps, sensors, config.count, config.silent)
 
