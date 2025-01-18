@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import boto3
@@ -6,18 +7,20 @@ import boto3
 DYNAMODB_TABLE = 'Sensordata'
 TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_Communication'
 
+TIME_WINDOW_MINUTES = 30  # Time windows for the analysis = now - TIME_WINDOW_MINUTES -> analysis in DB
+
 # Sensor Type Config
 SENSOR_CONFIG = {
     "MQTT-Master": {
         "parameters": {
             "soil_moisture": {
                 "min": 30,
-                "max": 80,
+                "max": 95,
                 "low_message": "{location}: Soil moisture is critically low ({value}%). Consider watering immediately.",
                 "high_message": "{location}: Soil moisture is too high ({value}%). Avoid overwatering."
             },
             "temperature": {
-                "min": 0,
+                "min": -7,
                 "max": 30,
                 "low_message": "{location}: Soil sensor detected low temperature ({value}°C). Frost protection may be required.",
                 "high_message": "{location}: Soil sensor detected high temperature ({value}°C). Consider shading or cooling measures."
@@ -27,13 +30,13 @@ SENSOR_CONFIG = {
     "IoT-2000": {
         "parameters": {
             "humidity": {
-                "min": 20,
-                "max": 80,
+                "min": 30,
+                "max": 95,
                 "low_message": "{location}: Weather station reports low humidity ({value}%). Monitor conditions closely.",
                 "high_message": "{location}: Weather station reports high humidity ({value}%). Take precautions."
             },
             "temperature": {
-                "min": 0,
+                "min": -7,
                 "max": 30,
                 "low_message": "{location}: Weather station reports low temperature ({value}°C). Frost protection recommended.",
                 "high_message": "{location}: Weather station reports high temperature ({value}°C). Cooling measures advised."
@@ -43,13 +46,13 @@ SENSOR_CONFIG = {
     "sensormatic": {
         "parameters": {
             "humidity": {
-                "min": 20,
-                "max": 80,
+                "min": 30,
+                "max": 95,
                 "low_message": "{location}: Sensormatic reports low humidity ({value}%). Monitor conditions closely.",
                 "high_message": "{location}: Sensormatic reports high humidity ({value}%). Take precautions."
             },
             "temperature": {
-                "min": 0,
+                "min": -7,
                 "max": 30,
                 "low_message": "{location}: Sensormatic reports low temperature ({value}°C). Frost protection may be required.",
                 "high_message": "{location}: Sensormatic reports high temperature ({value}°C). Cooling measures advised."
@@ -78,37 +81,56 @@ def invoke_telegram_lambda(action, payload):
         raise e
 
 
-def process_sensor_data(sensor_type, location_string, measurements):
-    """Process sensor data based on the sensor type configuration."""
-    if sensor_type not in SENSOR_CONFIG:
-        raise ValueError(f"Unknown sensor type: '{sensor_type}'.")
+def generate_combined_recommendations(sensor_items):
+    """Generate a combined recommendation message for all sensors."""
+    recommendations = []
+    for sensor_data in sensor_items:
+        sensor_type = sensor_data['sensor_type']['S']
+        location = sensor_data['location']['M']
+        latitude = location['lat']['N']
+        longitude = location['lon']['N']
+        location_string = f"Sensor (Lat {latitude}, Lon {longitude})"
+        measurements = sensor_data['measurements']['M']
 
-    sensor_params = SENSOR_CONFIG[sensor_type]["parameters"]
-    for param, config in sensor_params.items():
-        if param in measurements:
-            value = float(measurements[param]["N"])
-            if value < config["min"]:
-                invoke_telegram_lambda(
-                    action='send_message',
-                    payload={"message": config["low_message"].format(location=location_string, value=value)}
-                )
-            elif value > config["max"]:
-                invoke_telegram_lambda(
-                    action='send_message',
-                    payload={"message": config["high_message"].format(location=location_string, value=value)}
-                )
+        if sensor_type not in SENSOR_CONFIG:
+            continue
+
+        sensor_params = SENSOR_CONFIG[sensor_type]["parameters"]
+        for param, config in sensor_params.items():
+            if param in measurements:
+                value = float(measurements[param]["N"])
+                if value < config["min"]:
+                    recommendations.append(
+                        f"{config['low_message'].format(location=location_string, value=value)}"
+                    )
+                elif value > config["max"]:
+                    recommendations.append(
+                        f"{config['high_message'].format(location=location_string, value=value)}"
+                    )
+
+    # Testing Purposes
+    if not recommendations:
+        return "(TESTING!) ✅ All sensors are operating within normal parameters."
+
+    return "\n\n".join(recommendations)
 
 
-def check_and_notify(sensor_data):
-    """Analyze sensor data and send recommendations."""
-    sensor_type = sensor_data['sensor_type']['S']
-    location = sensor_data['location']['M']
-    latitude = location['lat']['N']
-    longitude = location['lon']['N']
-    location_string = f"Location (Lat: {latitude}, Lon: {longitude})"
-    measurements = sensor_data['measurements']['M']
+def get_recent_sensor_data(trigger_time):
+    """Fetch sensor data from the DynamoDB table based on the configured timeframe."""
+    try:
+        start_time_epoch = int((trigger_time - timedelta(minutes=TIME_WINDOW_MINUTES)).timestamp())
 
-    process_sensor_data(sensor_type, location_string, measurements)
+        response = dynamodb.scan(
+            TableName=DYNAMODB_TABLE,
+            FilterExpression='timestamp >= :start_time',
+            ExpressionAttributeValues={
+                ':start_time': {'N': str(start_time_epoch)}
+            }
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        logger.error(f"Error querying DynamoDB: {str(e)}")
+        raise
 
 
 def lambda_handler(event, context):
@@ -116,17 +138,21 @@ def lambda_handler(event, context):
     try:
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
-        response = dynamodb.scan(TableName=DYNAMODB_TABLE)
-        sensor_items = response.get('Items', [])
+        # Get trigger time from event bridge trigger
+        trigger_time_str = event['time']
+        trigger_time = datetime.fromisoformat(trigger_time_str.replace("Z", "+00:00"))
 
-        for sensor_data in sensor_items:
-            check_and_notify(sensor_data)
+        sensor_items = get_recent_sensor_data(trigger_time)
 
-        logger.debug("Recommendations evaluated.")
-        return {
-            "statusCode": 200,
-            "body": json.dumps({"message": "Recommendations processed successfully."})
-        }
+        combined_message = generate_combined_recommendations(sensor_items)
+        if combined_message:
+            invoke_telegram_lambda(
+                action='send_message',
+                payload={"message": combined_message}
+            )
+            logger.info("Recommendations sent to Telegram.")
+        else:
+            logger.info("No recommendations to send.")
 
     except ValueError as e:
         logger.error({str(e)})
