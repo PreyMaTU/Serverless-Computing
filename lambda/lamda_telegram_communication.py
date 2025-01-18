@@ -7,7 +7,7 @@ from botocore.exceptions import BotoCoreError
 
 # Config
 TELEGRAM_TOKEN = "7701970803:AAHMBH5xrO_bD7jPZxxqQcRlm8tlsGkkjEs"
-TELEGRAM_CHAT_ID = "-4790922611"
+TELEGRAM_CHAT_ID = "-4731796983"
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -18,22 +18,36 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 def send_telegram_message(message):
     """
     Sends a message to the configured Telegram chat using the Telegram API.
+    Splits the message into smaller parts if it exceeds the maximum length.
     """
     url = f"{TELEGRAM_API_URL}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-    }
-    try:
-        response = requests.post(url, json=payload)
-        if response.status_code == 200:
-            logger.debug(f"Message sent to Telegram: {message}")
-        else:
-            logger.error(f"Failed to send message. Status: {response.status_code}, Response: {response.text}")
-            raise RuntimeError(f"Failed to send message to Telegram. Response: {response.text}")
-    except requests.RequestException as e:
-        logger.error(f"RequestException occurred: {str(e)}")
-        raise RuntimeError(f"An error occurred while sending a message to Telegram: {str(e)}")
+    max_length = 3500  # Safer limit for long messages
+    start = 0
+
+    while start < len(message):
+        # Find the end of the current chunk
+        end = min(start + max_length, len(message))
+        if end < len(message):
+            newline_index = message.rfind("\n", start, end)  # Try to break at a newline
+            if newline_index > start:
+                end = newline_index
+
+        chunk = message[start:end]
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": chunk,
+        }
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                logger.debug(f"Message chunk sent to Telegram: {chunk}")
+            else:
+                raise RuntimeError(f"Failed to send message chunk. Status: {response.status_code}, Response: {response.text}")
+        except requests.RequestException as e:
+            raise RuntimeError(f"An error occurred while sending a message to Telegram: {str(e)}")
+
+        # Move to the next chunk
+        start = end
 
 
 def send_telegram_image(bucket_name, s3_key, caption=None):
@@ -55,13 +69,10 @@ def send_telegram_image(bucket_name, s3_key, caption=None):
             if response.status_code == 200:
                 logger.debug(f"Image sent to Telegram: {bucket_name}/{s3_key}")
             else:
-                logger.error(f"Failed to send image. Status: {response.status_code}, Response: {response.text}")
                 raise RuntimeError(f"Failed to send image to Telegram. Response: {response.text}")
     except BotoCoreError as e:
-        logger.error(f"BotoCoreError occurred: {str(e)}")
         raise RuntimeError(f"Failed to download image from S3: {str(e)}")
     except requests.RequestException as e:
-        logger.error(f"RequestException occurred: {str(e)}")
         raise RuntimeError(f"An error occurred while sending an image to Telegram: {str(e)}")
 
 
