@@ -1,5 +1,8 @@
 import json
 import logging
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -11,6 +14,18 @@ TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+def format_timestamp(timestamp):
+    """
+    Formats the timestamp in a more readable format for both UTC and local time.
+    """
+    utc_time = timestamp.astimezone(timezone.utc)
+    utc_formatted = utc_time.strftime("%A, %d %B %Y at %H:%M:%S UTC")
+
+    local_time = timestamp.astimezone(ZoneInfo("Europe/Vienna"))
+    local_formatted = local_time.strftime("%A, %d %B %Y at %H:%M:%S %Z")
+
+    return utc_formatted, local_formatted
 
 
 def get_latest_heatmap():
@@ -37,10 +52,14 @@ def lambda_handler(event, context):
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
         latest_key, last_modified = get_latest_heatmap()
-        timestamp = last_modified.strftime("%Y-%m-%d %H:%M:%S")
-        caption = (f"The latest heatmap visualization of your field conditions is now available. "
-                   f"This map was generated on {timestamp}. "
-                   f"Check for updates on soil moisture and temperature to plan your next steps!")
+        utc_formatted, local_formatted = format_timestamp(last_modified)
+
+        caption = (
+            f"The latest heatmap visualization of your field conditions is now available.\n\n"
+            f"🌐 UTC Time: {utc_formatted}\n"
+            f"🕒 Local Time: {local_formatted}\n\n"
+            f"Check for updates on soil moisture and temperature to plan your next steps!"
+        )
 
         response = lambda_client.invoke(
             FunctionName=TELEGRAM_LAMBDA_ARN,
@@ -58,7 +77,7 @@ def lambda_handler(event, context):
             "statusCode": 200,
             "body": json.dumps({
                 "message": f"Heatmap {latest_key} sent successfully.",
-                "timestamp": timestamp
+                "utc_timestamp": utc_formatted
             })
         }
 
