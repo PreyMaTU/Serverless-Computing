@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import os
 
 # Set Matplotlib config directory to /tmp (must be set before importing Matplotlib)
@@ -99,14 +100,17 @@ def create_heatmap(data):
     cbar = fig.colorbar(sm, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
     cbar.set_label("Temperature (°C)")
 
+    # Local time for the plot
+    local_timestamp = datetime.now(ZoneInfo("Europe/Vienna")).strftime("%A, %d %B %Y, %H:%M:%S %Z")
     ax.set_title(
-        "Satellite Heatmap with Temperature-Based Colored Squares", fontsize=15
+        f"Satellite Heatmap (Generated: {local_timestamp})", fontsize=15
     )
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-    dynamic_output_path = DEFAULT_OUTPUT_PATH.replace(".png", f"_{timestamp}.png")
+    # UTC time for the filename
+    timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    dynamic_output_path = DEFAULT_OUTPUT_PATH.replace(".png", f"_{timestamp_utc}.png")
 
     buffer = BytesIO()
     plt.savefig(buffer, format="png", bbox_inches="tight")
