@@ -122,7 +122,10 @@ def get_recent_sensor_data(trigger_time):
 
         response = dynamodb.scan(
             TableName=DYNAMODB_TABLE,
-            FilterExpression='timestamp >= :start_time',
+            FilterExpression='#ts >= :start_time',
+            ExpressionAttributeNames={
+                '#ts': 'timestamp'  # Alias for "timestamp"
+            },
             ExpressionAttributeValues={
                 ':start_time': {'N': str(start_time_epoch)}
             }
