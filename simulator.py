@@ -2,6 +2,7 @@ import time
 import iot_core as ic
 from sensor import create_sensors_from_data_file
 from argparse import ArgumentParser
+from datetime import datetime, timezone
 
 # MQTT Broker Configuration
 BROKER = "a86hzqaw9f6v0-ats.iot.eu-north-1.amazonaws.com"  # Replace with your MQTT broker address
@@ -18,14 +19,34 @@ SAMPLE_RATE_PER_SENSOR = 1 / 120  # Number of samples per second per sensor
 
 
 def configure():
-    parser = ArgumentParser(
-        prog="IoT Core Simulator", description="Simulates multiple IoT sensors"
-    )
-    parser.add_argument("-c", "--count", type=int, default=float("inf"))
-    parser.add_argument("-s", "--silent", action="store_true")
+    parser = ArgumentParser(prog='IoT Core Simulator', description='Simulates multiple IoT sensors')
+    parser.add_argument('-c', '--count', type=int, default=float('inf'))
+    parser.add_argument('-s', '--silent', action='store_true')
+    parser.add_argument('-t', '--time', type=str, default=None)
 
     return parser.parse_args()
 
+def offset_timestamps( timestamps, offset_date ):
+    # Nothing to offset
+    if offset_date is None or len(timestamps) == 0:
+        return timestamps
+    
+    # Offset to today
+    if offset_date == 'now':
+        offset_date= datetime.now(timezone.utc)
+
+    # Offset to provided date
+    else:
+        offset_date= datetime.fromisoformat( offset_date )
+
+    # Parse timestamps and compute offset
+    timestamps= [ datetime.fromisoformat(ts) for ts in timestamps ]
+    offset= offset_date - timestamps[0]
+
+    print(f'Adding timestamp offset of {offset}: {timestamps[0]} -> {timestamps[0]+offset}')
+
+    # Add the offset to all timestamps and convert them back into ISO strings
+    return [ (ts+ offset).isoformat() for ts in timestamps ]
 
 def send_loop(timestamps, sensors, count, silent):
     start_time = time.time()
@@ -66,6 +87,8 @@ def main():
         "./data/INCA analysis - large domain Datensatz_20250101T0000_20250103T2300.json",
         SENSOR_ID_PREFIX,
     )
+
+    timestamps= offset_timestamps(timestamps, config.time)
 
     ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 
