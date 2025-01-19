@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, timezone
 import json
 import logging
+from datetime import datetime, timedelta
+
 import boto3
 
 # General Config
