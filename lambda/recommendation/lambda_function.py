@@ -22,7 +22,7 @@ SENSOR_CONFIG = {
         "parameters": {
             "soil_moisture": {
                 "min": 30,
-                "max": 95,
+                "max": 100,
                 "low_message": "{location}: Soil moisture is critically low ({value}%). Consider watering immediately.",
                 "high_message": "{location}: Soil moisture is too high ({value}%). Avoid overwatering."
             },
@@ -38,7 +38,7 @@ SENSOR_CONFIG = {
         "parameters": {
             "humidity": {
                 "min": 30,
-                "max": 95,
+                "max": 100,
                 "low_message": "{location}: Weather station reports low humidity ({value}%). Monitor conditions closely.",
                 "high_message": "{location}: Weather station reports high humidity ({value}%). Take precautions."
             },
@@ -54,7 +54,7 @@ SENSOR_CONFIG = {
         "parameters": {
             "humidity": {
                 "min": 30,
-                "max": 95,
+                "max": 100,
                 "low_message": "{location}: Sensormatic reports low humidity ({value}%). Monitor conditions closely.",
                 "high_message": "{location}: Sensormatic reports high humidity ({value}%). Take precautions."
             },
