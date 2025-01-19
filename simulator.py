@@ -95,6 +95,7 @@ def main():
         config.count= config.batches * len(sensors)
         print(f'Sending {config.batches} batches to {len(sensors)} sensors')
 
+    ic.connect_to_iot_core(BROKER, PORT, ROOT_CERT_FILE, CERT_FILE, KEY_FILE, CLIENT_ID)
 
     message_count, runtime = send_loop(timestamps, sensors, config.count, config.silent)
 
