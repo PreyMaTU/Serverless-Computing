@@ -9,11 +9,48 @@ from botocore.exceptions import BotoCoreError, ClientError
 # Config
 s3 = boto3.client('s3')
 lambda_client = boto3.client('lambda')
+dynamodb = boto3.client('dynamodb')
+
 BUCKET_NAME = "heatmap-bucket-agrisense"
 TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_Communication'
 
+EVENT_IDEMPOTENCY_TABLE = 'EventIdempotencyTable'
+EVENT_IDEMPOTENCY_FUNCTION_NAME = "DeliveryVisualizationFunction"
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+def is_event_processed(pk, sk):
+    """
+    Check if the event with the given primary and sort key has already been processed.
+    """
+    try:
+        response = dynamodb.get_item(
+            TableName=EVENT_IDEMPOTENCY_TABLE,
+            Key={
+                'pk': {'S': pk},
+                'sk': {'S': sk}
+            }
+        )
+        return 'Item' in response
+    except Exception as e:
+        raise e
+
+
+def mark_event_as_processed(pk, sk):
+    """
+    Mark the event with the given primary and sort key as processed.
+    """
+    try:
+        dynamodb.put_item(
+            TableName=EVENT_IDEMPOTENCY_TABLE,
+            Item={
+                'pk': {'S': pk},
+                'sk': {'S': sk}
+            }
+        )
+    except Exception as e:
+        raise e
 
 def format_timestamp(timestamp):
     """
@@ -51,6 +88,20 @@ def lambda_handler(event, context):
     try:
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
+        # Extract event details
+        sequencer = event['Records'][0]['s3']['object']['sequencer']
+        pk = EVENT_IDEMPOTENCY_FUNCTION_NAME
+        sk = sequencer
+
+        # Check idempotency
+        if is_event_processed(pk, sk):
+            logger.info(f"Event with sequencer {sequencer} already processed for {pk}.")
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": "Event already processed."})
+            }
+
+
         latest_key, last_modified = get_latest_heatmap()
         utc_formatted, local_formatted = format_timestamp(last_modified)
 
@@ -72,6 +123,9 @@ def lambda_handler(event, context):
             })
         )
         logger.debug(f"Telegram Lambda invoked successfully: {response}")
+
+        # Mark the event as processed
+        mark_event_as_processed(pk, sk)
 
         return {
             "statusCode": 200,

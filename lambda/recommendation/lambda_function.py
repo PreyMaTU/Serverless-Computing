@@ -5,8 +5,14 @@ from datetime import datetime, timedelta
 import boto3
 
 # General Config
-DYNAMODB_TABLE = 'Sensordata'
+dynamodb = boto3.client('dynamodb')
+lambda_client = boto3.client('lambda')
+SENSOR_DATA_TABLE = 'Sensordata'
+
 TELEGRAM_LAMBDA_ARN = 'arn:aws:lambda:eu-north-1:881490115333:function:Telegram_Communication'
+
+EVENT_IDEMPOTENCY_TABLE = 'EventIdempotencyTable'
+EVENT_IDEMPOTENCY_FUNCTION_NAME = 'RecommendationFunction'
 
 TIME_WINDOW_MINUTES = 30  # Time windows for the analysis = now - TIME_WINDOW_MINUTES -> analysis in DB
 
@@ -62,11 +68,41 @@ SENSOR_CONFIG = {
     }
 }
 
-dynamodb = boto3.client('dynamodb')
-lambda_client = boto3.client('lambda')
-
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+
+def is_event_processed(pk, sk):
+    """
+    Check if the event with the given primary and sort key has already been processed.
+    """
+    try:
+        response = dynamodb.get_item(
+            TableName=EVENT_IDEMPOTENCY_TABLE,
+            Key={
+                'pk': {'S': pk},
+                'sk': {'S': sk}
+            }
+        )
+        return 'Item' in response
+    except Exception as e:
+        raise e
+
+
+def mark_event_as_processed(pk, sk):
+    """
+    Mark the event with the given primary and sort key as processed.
+    """
+    try:
+        dynamodb.put_item(
+            TableName=EVENT_IDEMPOTENCY_TABLE,
+            Item={
+                'pk': {'S': pk},
+                'sk': {'S': sk}
+            }
+        )
+    except Exception as e:
+        raise e
 
 
 def invoke_telegram_lambda(action, payload):
@@ -122,7 +158,7 @@ def get_recent_sensor_data(trigger_time):
         start_time_epoch = int((trigger_time - timedelta(minutes=TIME_WINDOW_MINUTES)).timestamp())
 
         response = dynamodb.scan(
-            TableName=DYNAMODB_TABLE,
+            TableName=SENSOR_DATA_TABLE,
             FilterExpression='#ts >= :start_time',
             ExpressionAttributeNames={
                 '#ts': 'timestamp'  # Alias for "timestamp"
@@ -142,6 +178,19 @@ def lambda_handler(event, context):
     try:
         logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
+        # Extract the EventBridge event ID
+        event_id = event['id']
+        pk = EVENT_IDEMPOTENCY_FUNCTION_NAME
+        sk = event_id
+
+        # Check idempotency
+        if is_event_processed(pk, sk):
+            logger.info(f"Event with ID {event_id} already processed for {pk}.")
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": "Event already processed."})
+            }
+
         # Get trigger time from event bridge trigger
         trigger_time_str = event['time']
         trigger_time = datetime.fromisoformat(trigger_time_str.replace("Z", "+00:00"))
@@ -157,6 +206,16 @@ def lambda_handler(event, context):
             logger.info("Recommendations sent to Telegram.")
         else:
             logger.info("No recommendations to send.")
+
+        # Mark the event as processed
+        mark_event_as_processed(pk, sk)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Recommendations processed and sent successfully."
+            })
+        }
 
     except ValueError as e:
         logger.error({str(e)})
