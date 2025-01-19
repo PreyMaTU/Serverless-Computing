@@ -93,6 +93,8 @@ def lambda_handler(event, context):
         pk = EVENT_IDEMPOTENCY_FUNCTION_NAME
         sk = sequencer
 
+        logger.debug(f"Processing event with sequencer: {sequencer}")
+
         # Check idempotency
         if is_event_processed(pk, sk):
             logger.info(f"Event with sequencer {sequencer} already processed for {pk}.")
